@@ -12,6 +12,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class QueueDatabaseHelper extends SQLiteOpenHelper {
 	
 	private AtomicInteger mRefCount = new AtomicInteger();
+	private SQLiteDatabase mDatabase;
 
 	public QueueDatabaseHelper(Context context) {
 		super(context, QueueContracts.DATABASE_NAME, null, QueueContracts.DATABASE_VERSION);
@@ -30,29 +31,35 @@ public class QueueDatabaseHelper extends SQLiteOpenHelper {
 		db.execSQL(QueueContracts.QUEUE_ITEM_CREATE_TABLE);
 		db.execSQL(QueueContracts.NEXT_CREATE_TABLE);
 	}
-
-	@Override
-	public SQLiteDatabase getWritableDatabase() {
-		SQLiteDatabase db = super.getWritableDatabase();
-		mRefCount.incrementAndGet();
-		return db;
-	}
 	
-	
+	public SQLiteDatabase getRefCountedReadableDatabase() {
+        return openDatabase();
+    }
 
-	@Override
-	public SQLiteDatabase getReadableDatabase() {
-		SQLiteDatabase db = super.getReadableDatabase();
-		mRefCount.incrementAndGet();
-		return db;
-	}
+    public SQLiteDatabase getRefCountedWritableDatabase() {
+        return openDatabase();
+    }
 
-	@Override
-	public synchronized void close() {
-		if (mRefCount.get() > 0) {
-			mRefCount.decrementAndGet();
-		} else {
-		    super.close();
-		}
-	}
+    public synchronized SQLiteDatabase openDatabase() {
+        if (mRefCount.get() == 0) {
+            mDatabase = getWritableDatabase(); // open database
+        }
+        mRefCount.incrementAndGet();
+        return mDatabase;
+    }
+
+    public synchronized boolean closeDatabase() {
+        boolean result = true;
+        if (mRefCount.get() > 0) {
+            int openRef = mRefCount.decrementAndGet();
+            if (openRef == 0) {
+                try {
+                    mDatabase.close(); // close database
+                } catch (Throwable t) {
+                    result = false;
+                }
+            }
+        }
+        return result;
+    }
 }
